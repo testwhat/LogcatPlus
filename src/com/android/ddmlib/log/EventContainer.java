@@ -28,43 +28,6 @@ import java.util.regex.Pattern;
 public class EventContainer {
 
     /**
-     * Comparison method for {@link EventContainer#testValue(int, Object, com.android.ddmlib.log.EventContainer.CompareMethod)}
-     *
-     */
-    public enum CompareMethod {
-        EQUAL_TO("equals", "=="),
-        LESSER_THAN("less than or equals to", "<="),
-        LESSER_THAN_STRICT("less than", "<"),
-        GREATER_THAN("greater than or equals to", ">="),
-        GREATER_THAN_STRICT("greater than", ">"),
-        BIT_CHECK("bit check", "&");
-
-        private final String mName;
-        private final String mTestString;
-
-        private CompareMethod(String name, String testString) {
-            mName = name;
-            mTestString = testString;
-        }
-
-        /**
-         * Returns the display string.
-         */
-        @Override
-        public String toString() {
-            return mName;
-        }
-
-        /**
-         * Returns a short string representing the comparison.
-         */
-        public String testString() {
-            return mTestString;
-        }
-    }
-
-
-    /**
      * Type for event data.
      */
     public static enum EventValueType {
@@ -311,85 +274,6 @@ public class EventContainer {
         }
 
         return EventValueType.UNKNOWN;
-    }
-
-    /**
-     * Checks that the <code>index</code>-th value of this event against a provided value.
-     * @param index the index of the value to test
-     * @param value the value to test against
-     * @param compareMethod the method of testing
-     * @return true if the test passed.
-     * @throws InvalidTypeException in case of type mismatch between the value to test and the value
-     * to test against, or if the compare method is incompatible with the type of the values.
-     * @see CompareMethod
-     */
-    public boolean testValue(int index, Object value,
-            CompareMethod compareMethod) throws InvalidTypeException {
-        EventValueType type = getType(mData);
-        if (index > 0 && type != EventValueType.LIST) {
-            throw new InvalidTypeException();
-        }
-
-        Object data = mData;
-        if (type == EventValueType.LIST) {
-            data = ((Object[])mData)[index];
-        }
-
-        if (!data.getClass().equals(data.getClass())) {
-            throw new InvalidTypeException();
-        }
-
-        switch (compareMethod) {
-            case EQUAL_TO:
-                return data.equals(value);
-            case LESSER_THAN:
-                if (data instanceof Integer) {
-                    return (((Integer)data).compareTo((Integer)value) <= 0);
-                } else if (data instanceof Long) {
-                    return (((Long)data).compareTo((Long)value) <= 0);
-                }
-
-                // other types can't use this compare method.
-                throw new InvalidTypeException();
-            case LESSER_THAN_STRICT:
-                if (data instanceof Integer) {
-                    return (((Integer)data).compareTo((Integer)value) < 0);
-                } else if (data instanceof Long) {
-                    return (((Long)data).compareTo((Long)value) < 0);
-                }
-
-                // other types can't use this compare method.
-                throw new InvalidTypeException();
-            case GREATER_THAN:
-                if (data instanceof Integer) {
-                    return (((Integer)data).compareTo((Integer)value) >= 0);
-                } else if (data instanceof Long) {
-                    return (((Long)data).compareTo((Long)value) >= 0);
-                }
-
-                // other types can't use this compare method.
-                throw new InvalidTypeException();
-            case GREATER_THAN_STRICT:
-                if (data instanceof Integer) {
-                    return (((Integer)data).compareTo((Integer)value) > 0);
-                } else if (data instanceof Long) {
-                    return (((Long)data).compareTo((Long)value) > 0);
-                }
-
-                // other types can't use this compare method.
-                throw new InvalidTypeException();
-            case BIT_CHECK:
-                if (data instanceof Integer) {
-                    return ((Integer) data & (Integer) value) != 0;
-                } else if (data instanceof Long) {
-                    return ((Long) data & (Long) value) != 0;
-                }
-
-                // other types can't use this compare method.
-                throw new InvalidTypeException();
-            default :
-                throw new InvalidTypeException();
-        }
     }
 
     private Object getValue(Object data, int valueIndex, boolean recursive) {

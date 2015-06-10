@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.android.ddmlib.utils;
+package com.android.ddmlib;
 
 /**
- * Utility class providing array to int/long conversion for data received from devices through adb. 
+ * Utility class providing array to int/long conversion for data received from devices through adb.
  */
 public final class ArrayHelper {
 
@@ -50,7 +50,7 @@ public final class ArrayHelper {
 
         return v;
     }
-    
+
     /**
      * Reads an unsigned 16 bit integer from an array coming from a device,
      * and returns it as an 'int'
@@ -66,7 +66,7 @@ public final class ArrayHelper {
 
         return v;
     }
-    
+
     /**
      * Reads a signed 64 bit integer from an array coming from a device.
      * @param value the array containing the int

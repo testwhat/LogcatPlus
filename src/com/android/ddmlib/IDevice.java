@@ -16,16 +16,14 @@
 
 package com.android.ddmlib;
 
-import com.android.annotations.NonNull;
-import com.android.annotations.Nullable;
-import com.android.ddmlib.log.LogReceiver;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
+import com.sun.security.ntlm.Client;
 
 /**
  *  A Device. It can be a physical device or an emulator.
@@ -265,24 +263,6 @@ public interface IDevice extends IShellEnabledDevice {
     public boolean isBootLoader();
 
     /**
-     * Returns whether the {@link Device} has {@link Client}s.
-     */
-    public boolean hasClients();
-
-    /**
-     * Returns the array of clients.
-     */
-    public Client[] getClients();
-
-    /**
-     * Returns a {@link Client} by its application name.
-     *
-     * @param applicationName the name of the application
-     * @return the <code>Client</code> object or <code>null</code> if no match was found.
-     */
-    public Client getClient(String applicationName);
-
-    /**
      * Returns a {@link SyncService} object to push / pull files to and from the device.
      *
      * @return <code>null</code> if the SyncService couldn't be created. This can happen if adb
@@ -349,34 +329,6 @@ public interface IDevice extends IShellEnabledDevice {
     public void executeShellCommand(String command, IShellOutputReceiver receiver)
             throws TimeoutException, AdbCommandRejectedException, ShellCommandUnresponsiveException,
             IOException;
-
-    /**
-     * Runs the event log service and outputs the event log to the {@link LogReceiver}.
-     * <p/>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     * @param receiver the receiver to receive the event log entries.
-     * @throws TimeoutException in case of timeout on the connection. This can only be thrown if the
-     * timeout happens during setup. Once logs start being received, no timeout will occur as it's
-     * not possible to detect a difference between no log and timeout.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    public void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException;
-
-    /**
-     * Runs the log service for the given log and outputs the log to the {@link LogReceiver}.
-     * <p/>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     *
-     * @param logname the logname of the log to read from.
-     * @param receiver the receiver to receive the event log entries.
-     * @throws TimeoutException in case of timeout on the connection. This can only be thrown if the
-     *            timeout happens during setup. Once logs start being received, no timeout will
-     *            occur as it's not possible to detect a difference between no log and timeout.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    public void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException;
 
     /**
      * Creates a port forwarding between a local and a remote port.
@@ -529,60 +481,6 @@ public interface IDevice extends IShellEnabledDevice {
      */
     public void reboot(String into)
             throws TimeoutException, AdbCommandRejectedException, IOException;
-
-    /**
-     * Return the device's battery level, from 0 to 100 percent.
-     * <p/>
-     * The battery level may be cached. Only queries the device for its
-     * battery level if 5 minutes have expired since the last successful query.
-     *
-     * @return the battery level or <code>null</code> if it could not be retrieved
-     * @deprecated use {@link #getBattery()}
-     */
-    @Deprecated
-    public Integer getBatteryLevel() throws TimeoutException,
-            AdbCommandRejectedException, IOException, ShellCommandUnresponsiveException;
-
-    /**
-     * Return the device's battery level, from 0 to 100 percent.
-     * <p/>
-     * The battery level may be cached. Only queries the device for its
-     * battery level if <code>freshnessMs</code> ms have expired since the last successful query.
-     *
-     * @param freshnessMs
-     * @return the battery level or <code>null</code> if it could not be retrieved
-     * @throws ShellCommandUnresponsiveException
-     * @deprecated use {@link #getBattery(long, TimeUnit))}
-     */
-    @Deprecated
-    public Integer getBatteryLevel(long freshnessMs) throws TimeoutException,
-            AdbCommandRejectedException, IOException, ShellCommandUnresponsiveException;
-
-    /**
-     * Return the device's battery level, from 0 to 100 percent.
-     * <p/>
-     * The battery level may be cached. Only queries the device for its
-     * battery level if 5 minutes have expired since the last successful query.
-     *
-     * @return a {@link Future} that can be used to query the battery level. The Future will return
-     * a {@link ExecutionException} if battery level could not be retrieved.
-     */
-    @NonNull
-    public Future<Integer> getBattery();
-
-    /**
-     * Return the device's battery level, from 0 to 100 percent.
-     * <p/>
-     * The battery level may be cached. Only queries the device for its
-     * battery level if <code>freshnessTime</code> has expired since the last successful query.
-     *
-     * @param freshnessTime the desired recency of battery level
-     * @param timeUnit the {@link TimeUnit} of freshnessTime
-     * @return a {@link Future} that can be used to query the battery level. The Future will return
-     * a {@link ExecutionException} if battery level could not be retrieved.
-     */
-    @NonNull
-    public Future<Integer> getBattery(long freshnessTime, @NonNull TimeUnit timeUnit);
 
 
     /**

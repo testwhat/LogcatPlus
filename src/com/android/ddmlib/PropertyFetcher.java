@@ -15,16 +15,20 @@
  */
 package com.android.ddmlib;
 
-import com.android.annotations.NonNull;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.SettableFuture;
-
+import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
 
 /**
  * Fetches and caches 'getprop' values from device.
@@ -43,11 +47,10 @@ class PropertyFetcher {
     /**
      * Shell output parser for a getprop command
      */
-    @VisibleForTesting
     static class GetPropReceiver extends MultiLineReceiver {
 
         private final Map<String, String> mCollectedProperties =
-                Maps.newHashMapWithExpectedSize(EXPECTED_PROP_COUNT);
+                new HashMap<>(EXPECTED_PROP_COUNT);
 
         @Override
         public void processNewLines(String[] lines) {
@@ -83,12 +86,12 @@ class PropertyFetcher {
         }
     }
 
-    private final Map<String, String> mProperties = Maps.newHashMapWithExpectedSize(
+    private final Map<String, String> mProperties = new HashMap<>(
             EXPECTED_PROP_COUNT);
     private final IDevice mDevice;
     private CacheState mCacheState = CacheState.UNPOPULATED;
     private final Map<String, SettableFuture<String>> mPendingRequests =
-            Maps.newHashMapWithExpectedSize(4);
+            new HashMap<>(4);
 
     public PropertyFetcher(IDevice device) {
         mDevice = device;
@@ -177,5 +180,235 @@ class PropertyFetcher {
 
     private static boolean isRoProp(@NonNull String propName) {
         return propName.startsWith("ro.");
+    }
+}
+
+final class SettableFuture<V> implements Future<V> {
+    private final Sync<V> sync = new Sync<>();
+    private final ExecutionList executionList = new ExecutionList();
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        if (!sync.cancel(mayInterruptIfRunning)) {
+            return false;
+        }
+        executionList.execute();
+        if (mayInterruptIfRunning) {
+            // interruptTask();
+        }
+        return true;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        return sync.isCancelled();
+    }
+
+    @Override
+    public boolean isDone() {
+        return sync.isDone();
+    }
+
+    @Override
+    public V get() throws InterruptedException, ExecutionException {
+        return sync.get();
+    }
+
+    @Override
+    public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException,
+            TimeoutException {
+        return sync.get(unit.toNanos(timeout));
+    }
+
+    public boolean set(@Nullable V value) {
+        boolean result = sync.set(value);
+        if (result) {
+            executionList.execute();
+        }
+        return result;
+    }
+
+    public static <V> SettableFuture<V> create() {
+        return new SettableFuture<>();
+    }
+
+    public boolean setException(@NonNull Throwable throwable) {
+        boolean result = sync.setException(throwable);
+        if (result) {
+            executionList.execute();
+        }
+        return result;
+    }
+}
+
+final class Sync<V> extends AbstractQueuedSynchronizer {
+
+    private static final long serialVersionUID = 0L;
+
+    static final int RUNNING = 0;
+    static final int COMPLETING = 1;
+    static final int COMPLETED = 2;
+    static final int CANCELLED = 4;
+    static final int INTERRUPTED = 8;
+
+    private V value;
+    private Throwable exception;
+
+    static final CancellationException cancellationExceptionWithCause(
+            @Nullable String message, @Nullable Throwable cause) {
+        CancellationException exception = new CancellationException(message);
+        exception.initCause(cause);
+        return exception;
+    }
+
+    @Override
+    protected int tryAcquireShared(int ignored) {
+        if (isDone()) {
+            return 1;
+        }
+        return -1;
+    }
+
+    @Override
+    protected boolean tryReleaseShared(int finalState) {
+        setState(finalState);
+        return true;
+    }
+
+    V get(long nanos) throws TimeoutException, CancellationException,
+            ExecutionException, InterruptedException {
+
+        if (!tryAcquireSharedNanos(-1, nanos)) {
+            throw new TimeoutException("Timeout waiting for task.");
+        }
+
+        return getValue();
+    }
+
+    V get() throws CancellationException, ExecutionException,
+            InterruptedException {
+
+        acquireSharedInterruptibly(-1);
+        return getValue();
+    }
+
+    private V getValue() throws CancellationException, ExecutionException {
+        int state = getState();
+        switch (state) {
+            case COMPLETED:
+                if (exception != null) {
+                    throw new ExecutionException(exception);
+                } else {
+                    return value;
+                }
+
+            case CANCELLED:
+            case INTERRUPTED:
+                throw cancellationExceptionWithCause(
+                        "Task was cancelled.", exception);
+
+            default:
+                throw new IllegalStateException(
+                        "Error, synchronizer in invalid state: " + state);
+        }
+    }
+
+    boolean isDone() {
+        return (getState() & (COMPLETED | CANCELLED | INTERRUPTED)) != 0;
+    }
+
+    boolean isCancelled() {
+        return (getState() & (CANCELLED | INTERRUPTED)) != 0;
+    }
+
+    boolean wasInterrupted() {
+        return getState() == INTERRUPTED;
+    }
+
+    boolean set(@Nullable V v) {
+        return complete(v, null, COMPLETED);
+    }
+
+    boolean setException(Throwable t) {
+        return complete(null, t, COMPLETED);
+    }
+
+    boolean cancel(boolean interrupt) {
+        return complete(null, null, interrupt ? INTERRUPTED : CANCELLED);
+    }
+
+    private boolean complete(@Nullable V v, @Nullable Throwable t,
+            int finalState) {
+        boolean doCompletion = compareAndSetState(RUNNING, COMPLETING);
+        if (doCompletion) {
+            this.value = v;
+            this.exception = ((finalState & (CANCELLED | INTERRUPTED)) != 0)
+                    ? new CancellationException("Future.cancel() was called.") : t;
+            releaseShared(finalState);
+        } else if (getState() == COMPLETING) {
+            acquireShared(-1);
+        }
+        return doCompletion;
+    }
+}
+
+final class ExecutionList {
+    private RunnableExecutorPair runnables;
+    private boolean executed;
+
+    public ExecutionList() {
+    }
+
+    public void add(Runnable runnable, Executor executor) {
+        synchronized (this) {
+            if (!executed) {
+                runnables = new RunnableExecutorPair(runnable, executor, runnables);
+                return;
+            }
+        }
+        executeListener(runnable, executor);
+    }
+
+    public void execute() {
+        RunnableExecutorPair list;
+        synchronized (this) {
+            if (executed) {
+                return;
+            }
+            executed = true;
+            list = runnables;
+            runnables = null;
+        }
+        RunnableExecutorPair reversedList = null;
+        while (list != null) {
+            RunnableExecutorPair tmp = list;
+            list = list.next;
+            tmp.next = reversedList;
+            reversedList = tmp;
+        }
+        while (reversedList != null) {
+            executeListener(reversedList.runnable, reversedList.executor);
+            reversedList = reversedList.next;
+        }
+    }
+
+    private static void executeListener(Runnable runnable, Executor executor) {
+        try {
+            executor.execute(runnable);
+        } catch (RuntimeException e) {
+        }
+    }
+
+    private static final class RunnableExecutorPair {
+        final Runnable runnable;
+        final Executor executor;
+        @Nullable
+        RunnableExecutorPair next;
+
+        RunnableExecutorPair(Runnable runnable, Executor executor, RunnableExecutorPair next) {
+            this.runnable = runnable;
+            this.executor = executor;
+            this.next = next;
+        }
     }
 }

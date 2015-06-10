@@ -19,7 +19,6 @@ package com.android.ddmlib;
 import com.android.ddmlib.AdbHelper.AdbResponse;
 import com.android.ddmlib.FileListingService.FileEntry;
 import com.android.ddmlib.SyncException.SyncError;
-import com.android.ddmlib.utils.ArrayHelper;
 
 import java.io.File;
 import java.io.FileInputStream;

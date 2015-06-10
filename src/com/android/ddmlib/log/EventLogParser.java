@@ -16,20 +16,20 @@
 
 package com.android.ddmlib.log;
 
+import com.android.ddmlib.ArrayHelper;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.Log;
 import com.android.ddmlib.MultiLineReceiver;
 import com.android.ddmlib.log.EventContainer.EventValueType;
 import com.android.ddmlib.log.EventValueDescription.ValueType;
 import com.android.ddmlib.log.LogReceiver.LogEntry;
-import com.android.ddmlib.utils.ArrayHelper;
-import com.google.common.base.Charsets;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Map;
@@ -46,6 +46,7 @@ public final class EventLogParser {
 
     /** Location of the tag map file on the device */
     private static final String EVENT_TAG_MAP_FILE = "/system/etc/event-log-tags"; //$NON-NLS-1$
+    static final Charset UTF_8 = Charset.forName("UTF-8");
 
     /**
      * Event log entry types.  These must match up with the declarations in
@@ -123,11 +124,8 @@ public final class EventLogParser {
      * @param filePath
      * @return <code>true</code> if success, <code>false</code> if failure.
      */
-    public boolean init(String filePath)  {
-        BufferedReader reader = null;
-        try {
-            reader = new BufferedReader(new FileReader(filePath));
-
+    public boolean init(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             do {
                 line = reader.readLine();
@@ -135,18 +133,9 @@ public final class EventLogParser {
                     processTagLine(line);
                 }
             } while (line != null);
-
             return true;
         } catch (IOException e) {
             return false;
-        } finally {
-            try {
-                if (reader != null) {
-                    reader.close();
-                }
-            } catch (IOException e) {
-                // ignore
-            }
         }
     }
 
@@ -170,19 +159,14 @@ public final class EventLogParser {
                     // and take what the custom GcEventContainer class tells us.
                     // This is due to the event encoding several values on 2 longs.
                     // @see GcEventContainer
-                    if (value == GcEventContainer.GC_EVENT_TAG) {
-                        mValueDescriptionMap.put(value,
-                            GcEventContainer.getValueDescriptions());
-                    } else {
 
-                        String description = m.group(3);
-                        if (description != null && !description.isEmpty()) {
-                            EventValueDescription[] desc =
-                                processDescription(description);
+                    String description = m.group(3);
+                    if (description != null && !description.isEmpty()) {
+                        EventValueDescription[] desc =
+                            processDescription(description);
 
-                            if (desc != null) {
-                                mValueDescriptionMap.put(value, desc);
-                            }
+                        if (desc != null) {
+                            mValueDescriptionMap.put(value, desc);
                         }
                     }
                 } catch (NumberFormatException e) {
@@ -201,7 +185,7 @@ public final class EventLogParser {
         }
     }
 
-    private EventValueDescription[] processDescription(String description) {
+    private static EventValueDescription[] processDescription(String description) {
         String[] descriptions = description.split("\\s*,\\s*"); //$NON-NLS-1$
 
         ArrayList<EventValueDescription> list = new ArrayList<>();
@@ -280,12 +264,7 @@ public final class EventLogParser {
             data = list.toArray();
         }
 
-        EventContainer event;
-        if (tagValue == GcEventContainer.GC_EVENT_TAG) {
-            event = new GcEventContainer(entry, tagValue, data);
-        } else {
-            event = new EventContainer(entry, tagValue, data);
-        }
+        EventContainer event = new EventContainer(entry, tagValue, data);
 
         return event;
     }
@@ -342,13 +321,7 @@ public final class EventLogParser {
                 }
 
                 // now we can allocate and return the EventContainer
-                EventContainer event;
-                if (tagValue == GcEventContainer.GC_EVENT_TAG) {
-                    event = new GcEventContainer(tagValue, pid, -1 /* tid */, sec, nsec, data);
-                } else {
-                    event = new EventContainer(tagValue, pid, -1 /* tid */, sec, nsec, data);
-                }
-
+                EventContainer event = new EventContainer(tagValue, pid, -1 /* tid */, sec, nsec, data);
                 return event;
             } catch (NumberFormatException e) {
                 return null;
@@ -423,7 +396,7 @@ public final class EventLogParser {
                     return -1;
 
                 // get the string
-                String str = new String(eventData, offset, strLen, Charsets.UTF_8);
+                String str = new String(eventData, offset, strLen, UTF_8);
                 list.add(str);
                 offset += strLen;
                 break;
@@ -475,39 +448,29 @@ public final class EventLogParser {
             // get each individual values as String
             String[] values = data.split(",");
 
-            if (tagValue == GcEventContainer.GC_EVENT_TAG) {
-                // special case for the GC event!
-                Object[] objects = new Object[2];
+            // must be the same number as the number of descriptors.
+            if (values.length != desc.length) {
+                return null;
+            }
 
-                objects[0] = getObjectFromString(values[0], EventValueType.LONG);
-                objects[1] = getObjectFromString(values[1], EventValueType.LONG);
+            Object[] objects = new Object[values.length];
 
-                return objects;
-            } else {
-                // must be the same number as the number of descriptors.
-                if (values.length != desc.length) {
+            for (int i = 0 ; i < desc.length ; i++) {
+                Object obj = getObjectFromString(values[i], desc[i].getEventValueType());
+                if (obj == null) {
                     return null;
                 }
-
-                Object[] objects = new Object[values.length];
-
-                for (int i = 0 ; i < desc.length ; i++) {
-                    Object obj = getObjectFromString(values[i], desc[i].getEventValueType());
-                    if (obj == null) {
-                        return null;
-                    }
-                    objects[i] = obj;
-                }
-
-                return objects;
+                objects[i] = obj;
             }
+
+            return objects;
         }
 
         return null;
     }
 
 
-    private Object getObjectFromString(String value, EventValueType type) {
+    private static Object getObjectFromString(String value, EventValueType type) {
         try {
             switch (type) {
                 case INT:

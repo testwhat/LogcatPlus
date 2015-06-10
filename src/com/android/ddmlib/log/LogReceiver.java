@@ -17,7 +17,7 @@
 package com.android.ddmlib.log;
 
 
-import com.android.ddmlib.utils.ArrayHelper;
+import com.android.ddmlib.ArrayHelper;
 
 import java.security.InvalidParameterException;
 
@@ -215,7 +215,7 @@ public final class LogReceiver {
      * @param offset the offset of the first byte from the buffer representing the entry.
      * @return a new {@link LogEntry} or <code>null</code> if some error happened.
      */
-    private LogEntry createEntry(byte[] data, int offset) {
+    private static LogEntry createEntry(byte[] data, int offset) {
         if (data.length < offset + ENTRY_HEADER_SIZE) {
             throw new InvalidParameterException(
                     "Buffer not big enough to hold full LoggerEntry header");

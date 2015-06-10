@@ -16,8 +16,6 @@
 
 package com.android.ddmlib;
 
-import com.android.ddmlib.log.LogReceiver;
-
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
@@ -434,77 +432,6 @@ final class AdbHelper {
             }
         } finally {
             Log.v("ddms", "execute: returning");
-        }
-    }
-
-    /**
-     * Runs the Event log service on the {@link Device}, and provides its output to the
-     * {@link LogReceiver}.
-     * <p/>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     * @param adbSockAddr the socket address to connect to adb
-     * @param device the Device on which to run the service
-     * @param rcvr the {@link LogReceiver} to receive the log output
-     * @throws TimeoutException in case of timeout on the connection.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    public static void runEventLogService(InetSocketAddress adbSockAddr, Device device,
-            LogReceiver rcvr) throws TimeoutException, AdbCommandRejectedException, IOException {
-        runLogService(adbSockAddr, device, "events", rcvr); //$NON-NLS-1$
-    }
-
-    /**
-     * Runs a log service on the {@link Device}, and provides its output to the {@link LogReceiver}.
-     * <p/>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     * @param adbSockAddr the socket address to connect to adb
-     * @param device the Device on which to run the service
-     * @param logName the name of the log file to output
-     * @param rcvr the {@link LogReceiver} to receive the log output
-     * @throws TimeoutException in case of timeout on the connection.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    public static void runLogService(InetSocketAddress adbSockAddr, Device device, String logName,
-            LogReceiver rcvr) throws TimeoutException, AdbCommandRejectedException, IOException {
-        try (SocketChannel adbChan = SocketChannel.open(adbSockAddr)) {
-            adbChan.configureBlocking(false);
-
-            // if the device is not -1, then we first tell adb we're looking to talk
-            // to a specific device
-            setDevice(adbChan, device);
-
-            byte[] request = formAdbRequest("log:" + logName);
-            write(adbChan, request);
-
-            AdbResponse resp = readAdbResponse(adbChan, false /* readDiagString */);
-            if (!resp.okay) {
-                throw new AdbCommandRejectedException(resp.message);
-            }
-
-            byte[] data = new byte[16384];
-            ByteBuffer buf = ByteBuffer.wrap(data);
-            while (true) {
-                int count;
-
-                if (rcvr != null && rcvr.isCancelled()) {
-                    break;
-                }
-
-                count = adbChan.read(buf);
-                if (count < 0) {
-                    break;
-                } else if (count == 0) {
-                    try {
-                        Thread.sleep(WAIT_TIME * 5);
-                    } catch (InterruptedException ie) {
-                    }
-                } else {
-                    if (rcvr != null) {
-                        rcvr.parseNewData(buf.array(), buf.arrayOffset(), buf.position());
-                    }
-                    buf.rewind();
-                }
-            }
         }
     }
 

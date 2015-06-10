@@ -16,20 +16,13 @@
 
 package com.android.ddmlib;
 
-import com.android.annotations.NonNull;
-import com.android.annotations.VisibleForTesting;
-import com.android.annotations.concurrency.GuardedBy;
-import com.android.ddmlib.log.LogReceiver;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +33,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.android.annotations.NonNull;
 
 
 /**
@@ -64,15 +59,8 @@ final class Device implements IDevice {
     private final PropertyFetcher mPropFetcher = new PropertyFetcher(this);
     private final Map<String, String> mMountPoints = new HashMap<>();
 
-    private final BatteryFetcher mBatteryFetcher = new BatteryFetcher(this);
-
-    @GuardedBy("mClients")
-    private final List<Client> mClients = new ArrayList<>();
-
     /** Maps pid's of clients in {@link #mClients} to their package name. */
     private final Map<Integer, String> mClientInfo = new ConcurrentHashMap<>();
-
-    private final DeviceMonitor mMonitor;
 
     private static final String LOG_TAG = "Device";
     private static final char SEPARATOR = '-';
@@ -221,7 +209,7 @@ final class Device implements IDevice {
         }
     }
 
-    private String cleanupStringForDisplay(String s) {
+    private static String cleanupStringForDisplay(String s) {
         if (s == null) {
             return null;
         }
@@ -255,7 +243,6 @@ final class Device implements IDevice {
     void setState(DeviceState state) {
         mState = state;
     }
-
 
     /*
      * (non-Javadoc)
@@ -353,7 +340,8 @@ final class Device implements IDevice {
         if (mHardwareCharacteristics == null) {
             try {
                 String characteristics = getSystemProperty(PROP_BUILD_CHARACTERISTICS).get();
-                mHardwareCharacteristics = Sets.newHashSet(Splitter.on(',').split(characteristics));
+                mHardwareCharacteristics = new HashSet<>();
+                Collections.addAll(mHardwareCharacteristics, characteristics.split(","));
             } catch (Exception e) {
                 mHardwareCharacteristics = Collections.emptySet();
             }
@@ -478,7 +466,6 @@ final class Device implements IDevice {
         executeShellCommand(getScreenRecorderCommand(remoteFilePath, options), receiver, 0, null);
     }
 
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
     static String getScreenRecorderCommand(@NonNull String remoteFilePath,
             @NonNull ScreenRecorderOptions options) {
         StringBuilder sb = new StringBuilder();
@@ -515,6 +502,7 @@ final class Device implements IDevice {
         return sb.toString();
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void executeShellCommand(String command, IShellOutputReceiver receiver)
             throws TimeoutException, AdbCommandRejectedException, ShellCommandUnresponsiveException,
@@ -523,6 +511,7 @@ final class Device implements IDevice {
                 receiver, DdmPreferences.getTimeOut());
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void executeShellCommand(String command, IShellOutputReceiver receiver,
             int maxTimeToOutputResponse)
@@ -539,18 +528,6 @@ final class Device implements IDevice {
             IOException {
         AdbHelper.executeRemoteCommand(AndroidDebugBridge.getSocketAddress(), command, this,
                 receiver, maxTimeToOutputResponse, maxTimeUnits);
-    }
-
-    @Override
-    public void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runEventLogService(AndroidDebugBridge.getSocketAddress(), this, receiver);
-    }
-
-    @Override
-    public void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runLogService(AndroidDebugBridge.getSocketAddress(), this, logname, receiver);
     }
 
     @Override
@@ -587,78 +564,9 @@ final class Device implements IDevice {
                 String.format("%s:%s", namespace.getType(), remoteSocketName));   //$NON-NLS-1$
     }
 
-    Device(DeviceMonitor monitor, String serialNumber, DeviceState deviceState) {
-        mMonitor = monitor;
+    Device(String serialNumber, DeviceState deviceState) {
         mSerialNumber = serialNumber;
         mState = deviceState;
-    }
-
-    DeviceMonitor getMonitor() {
-        return mMonitor;
-    }
-
-    @Override
-    public boolean hasClients() {
-        synchronized (mClients) {
-            return !mClients.isEmpty();
-        }
-    }
-
-    @Override
-    public Client[] getClients() {
-        synchronized (mClients) {
-            return mClients.toArray(new Client[mClients.size()]);
-        }
-    }
-
-    @Override
-    public Client getClient(String applicationName) {
-        synchronized (mClients) {
-            for (Client c : mClients) {
-                if (applicationName.equals(c.getClientData().getClientDescription())) {
-                    return c;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    void addClient(Client client) {
-        synchronized (mClients) {
-            mClients.add(client);
-        }
-
-        addClientInfo(client);
-    }
-
-    List<Client> getClientList() {
-        return mClients;
-    }
-
-    void clearClientList() {
-        synchronized (mClients) {
-            mClients.clear();
-        }
-
-        clearClientInfo();
-    }
-
-    /**
-     * Removes a {@link Client} from the list.
-     * @param client the client to remove.
-     * @param notify Whether or not to notify the listeners of a change.
-     */
-    void removeClient(Client client, boolean notify) {
-        mMonitor.addPortToAvailableList(client.getDebuggerListenPort());
-        synchronized (mClients) {
-            mClients.remove(client);
-        }
-        if (notify) {
-            mMonitor.getServer().deviceChanged(this, CHANGE_CLIENT_LIST);
-        }
-
-        removeClientInfo(client);
     }
 
     /**
@@ -676,45 +584,8 @@ final class Device implements IDevice {
         return mSocketChannel;
     }
 
-    void update(int changeMask) {
-        mMonitor.getServer().deviceChanged(this, changeMask);
-    }
-
-    void update(Client client, int changeMask) {
-        mMonitor.getServer().clientChanged(client, changeMask);
-        updateClientInfo(client, changeMask);
-    }
-
     void setMountingPoint(String name, String value) {
         mMountPoints.put(name, value);
-    }
-
-    private void addClientInfo(Client client) {
-        ClientData cd = client.getClientData();
-        setClientInfo(cd.getPid(), cd.getClientDescription());
-    }
-
-    private void updateClientInfo(Client client, int changeMask) {
-        if ((changeMask & Client.CHANGE_NAME) == Client.CHANGE_NAME) {
-            addClientInfo(client);
-        }
-    }
-
-    private void removeClientInfo(Client client) {
-        int pid = client.getClientData().getPid();
-        mClientInfo.remove(pid);
-    }
-
-    private void clearClientInfo() {
-        mClientInfo.clear();
-    }
-
-    private void setClientInfo(int pid, String pkgName) {
-        if (pkgName == null) {
-            pkgName = UNKNOWN_PACKAGE;
-        }
-
-        mClientInfo.put(pid, pkgName);
     }
 
     @Override
@@ -845,7 +716,7 @@ final class Device implements IDevice {
      * @param filePath full directory path to file
      * @return {@link String} file name
      */
-    private String getFileName(String filePath) {
+    private static String getFileName(String filePath) {
         return new File(filePath).getName();
     }
 
@@ -902,40 +773,10 @@ final class Device implements IDevice {
         AdbHelper.reboot(into, AndroidDebugBridge.getSocketAddress(), this);
     }
 
-    @Override
-    public Integer getBatteryLevel() throws TimeoutException, AdbCommandRejectedException,
-            IOException, ShellCommandUnresponsiveException {
-        // use default of 5 minutes
-        return getBatteryLevel(5 * 60 * 1000);
-    }
-
-    @Override
-    public Integer getBatteryLevel(long freshnessMs) throws TimeoutException,
-            AdbCommandRejectedException, IOException, ShellCommandUnresponsiveException {
-        Future<Integer> futureBattery = getBattery(freshnessMs, TimeUnit.MILLISECONDS);
-        try {
-            return futureBattery.get();
-        } catch (InterruptedException | ExecutionException e) {
-            return null;
-        }
-    }
-
-    @NonNull
-    @Override
-    public Future<Integer> getBattery() {
-        return getBattery(5, TimeUnit.MINUTES);
-    }
-
-    @NonNull
-    @Override
-    public Future<Integer> getBattery(long freshnessTime, @NonNull TimeUnit timeUnit) {
-        return mBatteryFetcher.getBattery(freshnessTime, timeUnit);
-    }
-
     @NonNull
     @Override
     public List<String> getAbis() {
-        List<String> abis = Lists.newArrayListWithExpectedSize(2);
+        List<String> abis = new ArrayList<>(2);
         String abi = getProperty(IDevice.PROP_DEVICE_CPU_ABI);
         if (abi != null) {
             abis.add(abi);

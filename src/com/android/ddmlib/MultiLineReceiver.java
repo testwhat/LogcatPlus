@@ -16,8 +16,7 @@
 
 package com.android.ddmlib;
 
-import com.google.common.base.Charsets;
-
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 
 /**
@@ -35,6 +34,7 @@ public abstract class MultiLineReceiver implements IShellOutputReceiver {
     private String mUnfinishedLine = null;
 
     private final ArrayList<String> mArray = new ArrayList<>();
+    final static Charset UTF_8 = Charset.forName("UTF-8");
 
     /**
      * Set the trim lines flag.
@@ -51,7 +51,7 @@ public abstract class MultiLineReceiver implements IShellOutputReceiver {
     @Override
     public final void addOutput(byte[] data, int offset, int length) {
         if (!isCancelled()) {
-            String s = new String(data, offset, length, Charsets.UTF_8);
+            String s = new String(data, offset, length, UTF_8);
 
             // ok we've got a string
             // if we had an unfinished line we add it.

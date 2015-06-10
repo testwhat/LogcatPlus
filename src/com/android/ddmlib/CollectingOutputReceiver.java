@@ -16,8 +16,7 @@
 package com.android.ddmlib;
 
 
-import com.google.common.base.Charsets;
-
+import java.nio.charset.Charset;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -53,11 +52,12 @@ public class CollectingOutputReceiver implements IShellOutputReceiver {
         mIsCanceled.set(true);
     }
 
+    static final Charset UTF_8 = Charset.forName("UTF-8");
     @Override
     public void addOutput(byte[] data, int offset, int length) {
         if (!isCancelled()) {
             String s;
-            s = new String(data, offset, length, Charsets.UTF_8);
+            s = new String(data, offset, length, UTF_8);
             mOutputBuffer.append(s);
         }
     }
