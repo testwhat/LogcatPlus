@@ -23,7 +23,6 @@ import java.util.concurrent.Future;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.sun.security.ntlm.Client;
 
 /**
  *  A Device. It can be a physical device or an emulator.

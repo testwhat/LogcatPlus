@@ -91,12 +91,13 @@ public class PaneColored extends JTextPane implements LogcatPlus.LoggerPane,
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     String selText = getSelectedText();
+                    selText = selText == null ? "" : selText.trim();
                     String flgText = FlagUtil.getDecoders().get(miText).decode(selText);
                     if (flgText != null) {
-                        LLog.UILogWindow.log("\n============================\nflag str=" + selText
-                                + "\n" + flgText);
+                        LLog.UILogWindow.log("\n============================\nflag str="
+                                + selText + "\n" + flgText);
                     } else {
-                        LLog.i("Wrong text selection for decode flag");
+                        LLog.UILogWindow.log("Invalid flags:" + selText);
                     }
                     LLog.UILogWindow.showLog();
                 }

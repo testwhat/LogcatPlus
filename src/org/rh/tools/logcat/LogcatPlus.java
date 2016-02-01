@@ -96,7 +96,6 @@ import javax.swing.text.Element;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.Utilities;
-import javax.swing.text.View;
 
 import org.rh.util.JDefaultContextMenuUtil;
 import org.rh.util.JFilterTextField;
@@ -982,6 +981,7 @@ class RowHeader extends JPanel implements CaretListener, DocumentListener, Prope
     private Point mTmpPoint = new Point(0, 0);
 
     private HashMap<String, FontMetrics> mFonts;
+    private Runnable mCheckHeight;
 
     public RowHeader(JTextComponent c) {
         mComponent = c;
@@ -992,6 +992,17 @@ class RowHeader extends JPanel implements CaretListener, DocumentListener, Prope
         setBorderGap(5);
         c.addCaretListener(this);
         c.addPropertyChangeListener("font", this);
+        mCheckHeight = new Runnable() {
+            @Override
+            public void run() {
+                int preferredHeight = mComponent.getPreferredSize().height;
+                if (mLastHeight != preferredHeight) {
+                    setPreferredWidth();
+                    repaint();
+                    mLastHeight = preferredHeight;
+                }
+            }
+        };
     }
 
     public boolean getUpdateFont() {
@@ -1040,7 +1051,7 @@ class RowHeader extends JPanel implements CaretListener, DocumentListener, Prope
         super.paintComponent(g);
 
         FontMetrics fontMetrics = mComponent.getFontMetrics(mComponent.getFont());
-        int fontHeight = fontMetrics.getHeight();
+        //int fontHeight = fontMetrics.getHeight();
         Insets insets = getInsets();
         int availableWidth = getSize().width - insets.left - insets.right;
 
@@ -1067,7 +1078,8 @@ class RowHeader extends JPanel implements CaretListener, DocumentListener, Prope
                     if (log.length() > 2) {
                         g.setColor(LogLine.DeviceForUI.getLevelByString(log).color);
                         g.drawString(lineNumber, x, y);
-                        g.drawRect(x - 2, y - fontHeight + 4, stringWidth + 2, fontHeight - 2);
+                        //g.drawRect(x - 2, y - fontHeight + 4, stringWidth + 2, fontHeight - 2);
+                        g.drawLine(x, y + 2, stringWidth + 4, y + 2);
                     }
                 }
 
@@ -1138,28 +1150,8 @@ class RowHeader extends JPanel implements CaretListener, DocumentListener, Prope
         documentChanged();
     }
 
-    private static final Object COMPONENT_UI_PROPERTY_KEY = new StringBuffer("ComponentUIPropertyKey");
     private void documentChanged() {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                Object ui = mComponent.getClientProperty(COMPONENT_UI_PROPERTY_KEY);
-                if (ui instanceof javax.swing.plaf.basic.BasicTextUI) {
-                    javax.swing.plaf.basic.BasicTextUI t = (javax.swing.plaf.basic.BasicTextUI) ui;
-                    View v = t.getRootView(null);
-                    if (v == null || v.getParent() == null) {
-                        return;
-                    }
-                }
-                int preferredHeight = mComponent.getPreferredSize().height;
-
-                if (mLastHeight != preferredHeight) {
-                    setPreferredWidth();
-                    repaint();
-                    mLastHeight = preferredHeight;
-                }
-            }
-        });
+        SwingUtilities.invokeLater(mCheckHeight);
     }
 
     @Override

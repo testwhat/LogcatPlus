@@ -32,7 +32,6 @@ import java.util.regex.Pattern;
 
 import com.android.annotations.NonNull;
 import com.android.ddmlib.Log.LogLevel;
-import com.sun.security.ntlm.Client;
 
 /**
  * A connection to the host-side android debug bridge (adb)

@@ -1,0 +1,34 @@
+<project name="LogReader" default="dist" basedir=".">
+    <property name="src" location="src" />
+    <property name="build" location="bin" />
+    <property name="dist"  location="dist" />
+
+    <target name="init">
+        <tstamp/>
+        <mkdir dir="${build}"/>
+    </target>
+
+    <target name="compile" depends="init">
+        <javac srcdir="${src}" destdir="${build}" includeantruntime="false">
+			<src path="ddmlib" />
+        </javac>
+        <copy todir="${build}">
+            <fileset dir="src" includes="**/*.png,**/*.properties" />
+        </copy>
+    </target>
+
+
+    <target name="dist" depends="compile">
+        <jar jarfile="${dist}/logcatplus.jar" basedir="${build}">
+            <manifest>
+                <attribute name="Main-Class" value="org.rh.tools.logcat.LogcatPlus" />
+                <attribute name="SplashScreen-Image" value="splash.png" />
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="clean" description="clean up" >
+        <delete dir="${build}" />
+        <delete dir="${dist}" />
+    </target>
+</project>
